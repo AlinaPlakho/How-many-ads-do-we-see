@@ -24,6 +24,7 @@ From the results of segmentation, the ratio of the area of advertising elements 
 
 In the Study, the architecture of the neural network is based on a combination of U-Net and PSP-Net, which made it possible to achieve clearer and more explicit segmentation contours.
 
+[Схема архитектуры сети || Architecture diagram]
 ![Схема архитектуры сети || Architecture diagram](https://github.com/AlinaPlakho/How-many-ads-do-we-see/blob/main/Architecture%20diagram.jpg)
 _______________________________________________________________________________________________________________________________________________________________________
 _______________________________________________________________________________________________________________________________________________________________________
@@ -49,7 +50,10 @@ Mostly, the viewing angle corresponds to 60-80 degrees, at which human vision pe
 PNG image format, size 4032x3024
 Augmentation was carried out - the base was expanded to 1.920 frames. After the first stage of training - up to 2.400 frames.
 
+[Обучающая выборка || Training set]
 ![Обучающая выборка || Training set](https://github.com/AlinaPlakho/How-many-ads-do-we-see/blob/main/Training%20set.jpg)
+
+[Реузльтаты обучения || Results]
 ![Реузльтаты обучения || Results](https://github.com/AlinaPlakho/How-many-ads-do-we-see/blob/main/Results_2.jpg)
 ![Сколько рекламы? (1) || How many ads do we see? (1)](https://github.com/AlinaPlakho/How-many-ads-do-we-see/blob/main/Result_1.jpg)
 ![Сколько рекламы? (2) || How many ads do we see? (2)](https://github.com/AlinaPlakho/How-many-ads-do-we-see/blob/main/Result_2.jpg)
