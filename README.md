@@ -1,7 +1,7 @@
 # How-many-ads-do-we-see-?
 Visual analysis of the amount of advertising in the urban environment using computer vision (U-Net + PSP-Net) || Визуальный анализ заполненности городской среды элементами рекламы с помощью компьютерного зрения (U-Net + PSP-Net)
 
-PDF-information with visual materials - https://drive.google.com/file/d/1v0ffq4pYv2SAMInnPkagXIEkRLmf0ife/view?usp=share_link
+PDF-файл с визуальными материалами - https://drive.google.com/file/d/1v0ffq4pYv2SAMInnPkagXIEkRLmf0ife/view?usp=share_link
 
 
 
