@@ -1,0 +1,551 @@
+На основе сегментации изображений проведем анализ количества рекламы в городской среде.Работа включает в себя анализ по следующим пунктам:
+- Рекламные экраны,стенды вдоль тротуаров и дорог и т.д.
+- Вывески-названия на фасадах зданий.
+Из результатов сегментации вычисляется соотношение площади рекламных элементов к площади кадра; Развитие темы взможно в:
+- Анализе заполненности элементами рекламы фасадов зданий, являющихся объектом культурного наследия и т.п.(актуально для КГИОП)
+- Анализе количества рекламы вдоль дорог - воздействие на фокус внимания водителя.
+_______________________________________________________________________________________________________________________________________________________________________
+
+Based on image segmentation, we will analyze the amount of advertising in the urban environment. The work includes an analysis of the following points:
+- Advertising screens, stands along sidewalks and roads, etc.
+- Signboards-names on the facades of buildings.
+From the results of segmentation, the ratio of the area of advertising elements to the area of the frame is calculated; The development of the theme is possible in:
+- Analysis of the occupancy of the facades of buildings that are objects of cultural heritage, etc. with advertising elements (relevant for Department of Protection of Cultural and Historical Monuments)
+- Analysis of the amount of advertising along the roads - the impact on the focus of the driver's attention.
+
+
+
+
+Создана база из 480 фотографий и проведена сегментация изображений:
+- Экраны, плакаты, стенды и аналоги сегментированы красным цветом 250,0,0. 
+- Текстовые вывески на фасадах сегментированы зеленым цветов 0,250,0.
+- Остальная часть фотографии - черным.
+Преимущественно угол обзора соответствует 60-80 градусам,при которых человеческое зрение воспринимает символы, также есть расширенный угол, условно соответствующий
+углузрения 120 градусов (периферийное зрение),что позволяет провести своего рода анализ того,сколько "лишней" информации мы наблюдаем в городской среде.
+Формат изображений PNG, размер 4032х3024.
+
+Проведена аугментация - база расширена до 1920 кадров.
+Параметры аугментации:
+A.RandomBrightnessContrast(p=0.9)
+A.HueSaturationValue(hue_shift_limit=20,sat_shift_limit=30,val_shift_limit=30,p=0.5)
+A.RandomBrightness(limit=0.2,p=0.5)
+_______________________________________________________________________________________________________________________________________________________________________
+
+A database of 480 photographs was created and image segmentation was carried out:
+- Screens, posters, stands and analogues are segmented in red 250.0.0.
+- Text signs on the facades are segmented in green 0.250.0.
+- The rest of the photo is in black.
+Mostly, the viewing angle corresponds to 60-80 degrees, at which human vision perceives symbols, there is also an extended angle, conditionally corresponding to
+120 degree vision (peripheral vision), which allows us to conduct a kind of analysis of how much "extra" information we observe in the urban environment.
+PNG image format, size 4032x3024
+
+Augmentation was carried out - the base was expanded to 1920 frames.
+Augmentation options:
+A.RandomBrightnessContrast(p=0.9)
+A.HueSaturationValue(hue_shift_limit=20,sat_shift_limit=30,val_shift_limit=30,p=0.5)
+A.RandomBrightness(limit=0.2,p=0.5)
+
+
+_______________________________________________________________________________________________________________________________________________________________________
+
+
+1.0. IMPORT
+
+from tensorflow.keras.models import Model      # Импорт модели  
+from tensorflow.keras.layers import Input, Conv2DTranspose, concatenate, Activation, MaxPooling2D, Conv2D, BatchNormalization # Импорт слоев
+from tensorflow.keras import backend as K      # Импорт модуля backend keras'а
+from tensorflow.keras.optimizers import Adam   # Импорт оптимайзера
+from tensorflow.keras import utils             # Импорт модуля utils библиотеки tensorflow.keras для получения OHE-представления
+from google.colab import files                 # Импорт модуля files 
+import os                                      # Импорт библиотеки os для работы с файловой системой
+
+# Работа с изображениями и графиками
+import matplotlib.pyplot as plt                
+from keras.preprocessing import image
+from tensorflow.keras.preprocessing.image import load_img, img_to_array  
+from PIL import Image                          
+
+import numpy as np                             # Импортируем библиотеку numpy
+import random
+
+from tensorflow.keras.callbacks import ModelCheckpoint  # Импортируем объект ModelCheckpoint для работы с сохранением модели сети
+
+# Функция - пересечения областей
+def dice_coef(y_true, y_pred):
+    return (2. * K.sum(y_true * y_pred) + 1.) / (K.sum(y_true) + K.sum(y_pred) + 1.)
+    
+from google.colab import drive  # Подгружаем гугл-диск
+drive.mount('/content/drive')
+!unzip -q '/content/drive/My Drive/street.zip' # распаковка архива
+
+_______________________________________________________________________________________________________________________________________________________________________
+
+
+2.1. IMAGES LOADING
+
+# Глобальные параметры
+img_height = 192                      # Высота уменьшенной картинки (3024 - оригинальный размер)
+img_width = 256                       # Ширина уменьшенной картинки (4032 - оригинальный размер)
+num_classes = 3                       # Количество классов на изображении
+train_directory = '/content/Org'      # Путь к папке с файлами оригинальных изображений
+segment_directory = '/content/Сегментированный'    # Путь к папке с файлами сегментированных изображений
+
+images = [] # сюда будут заноситься полноразмерные картинки
+for filename in sorted(os.listdir(train_directory)): # Проходим по всем файлам в каталоге по указанному пути     
+    images.append(img_to_array(load_img(os.path.join(train_directory,filename), target_size=(img_height, img_width))).astype('uint8')) # в target_size указываем размер картинки
+print ('Оригинальные изображения загружены') 
+print ('Количество изображений: ', len(images)) 
+
+segments = [] # сюда будут заноситься маски
+for filename in sorted(os.listdir(segment_directory)): # Проходим по всем файлам в каталоге по указанному пути     
+    segments.append(img_to_array(load_img(os.path.join(segment_directory,filename), target_size=(img_height, img_width))).astype('uint8')) # в target_size указываем размер картинки
+print ('Маски загружены') 
+print ('Количество масок: ', len(segments)) 
+
+n = random.randint(0,len(images))
+fig, axs = plt.subplots(2, 5, figsize=(30, 10)) 
+for i in range(5): 
+    img = images[n]
+    seg = segments[n] 
+    axs[0,i].imshow(img) # Отображаем фото
+    axs[1,i].imshow(seg) # Отображаем фото
+    n+=1
+plt.show() #Показываем изображения
+
+_______________________________________________________________________________________________________________________________________________________________________
+
+2.2. IMAGES AUGMENTATION
+
+import cv2
+import albumentations as A
+
+transform_2 = A.RandomBrightnessContrast(p=0.9)
+transform_3 = A.HueSaturationValue (hue_shift_limit=20, sat_shift_limit=30, val_shift_limit=30,  p=0.5)
+transform_4 = A.RandomBrightness (limit=0.2, p=0.5)
+transform_5 = A.RandomContrast (limit=0.2, p=0.8)
+
+def aug (data, k = len(images)):
+  images_aug = []
+  for n in range(k):
+    aug_2 = transform_2(image=data[n])     # Яркоссть-контраст
+    aug_3 = transform_3(image=data[n])     # Насыщенность
+    aug_4 = transform_4(image=data[n])     # Только яркость
+    aug_5 = transform_5(image=data[n])     # Только контраст
+    image_transformed_2 = aug_2['image']
+    image_transformed_3 = aug_3['image']
+    image_transformed_4 = aug_4['image']
+    image_transformed_5 = aug_5['image']
+
+    images_aug.extend([data[n],
+                       img_to_array(image_transformed_2).astype('uint8'),
+                       img_to_array(image_transformed_3).astype('uint8'),
+                       img_to_array(image_transformed_4).astype('uint8'),
+                       img_to_array(image_transformed_5).astype('uint8')])
+    
+    #print("Изображение №", n, "трансформировано и добавлено")
+    
+  return images_aug     
+
+
+#Сделаем дубли масок
+def aug_seg (data, k = len(segments)):
+  segments_aug = []
+  for n in range(k):
+    segments_aug.extend([data[n], data[n], data[n], data[n], 
+                         data[n]])   
+    #print("Изображение №", n, "трансформировано и добавлено")  
+  return segments_aug      
+  
+new_images = aug(images)
+new_segments = aug_seg(segments)
+
+print('Количество исходных изображений было -', len(images))
+print('Количество изображений после аугментации -',len(new_images))
+print()
+print('Количество исходных масок было -', len(segments))
+print('Количество масок после аугментации -',len(new_segments))
+
+n = random.randrange(0,len(new_images),5)
+fig, axs = plt.subplots(2, 5, figsize=(30, 8)) 
+img_1 = new_images[n]
+img_2 = new_images[n+1]
+img_3 = new_images[n+2] 
+img_4 = new_images[n+3]   
+img_5 = new_images[n+4]   
+
+s_img_1 = new_segments[n]
+s_img_2 = new_segments[n+1]
+s_img_3 = new_segments[n+2] 
+s_img_4 = new_segments[n+3]   
+s_img_5 = new_segments[n+4]   
+
+axs[0,0].imshow(img_1) # Отображаем фото
+axs[0,1].imshow(img_2) # Отображаем фото
+axs[0,2].imshow(img_3) # Отображаем фото
+axs[0,3].imshow(img_4) # Отображаем фото
+axs[0,4].imshow(img_5) # Отображаем фото
+
+axs[1,0].imshow(s_img_1) # Отображаем фото
+axs[1,1].imshow(s_img_2) # Отображаем фото
+axs[1,2].imshow(s_img_3) # Отображаем фото
+axs[1,3].imshow(s_img_4) # Отображаем фото
+axs[1,4].imshow(s_img_5) # Отображаем фото
+
+
+# Проверяем, все ли преобразования прошли - через условную сумму пикселей. Если значения разные - все прошло успешно. 
+# Значения же масок должны быть все одианковыми
+print("Изображения:")
+print(np.sum(images[n//5]), "- оригинальное изображение перед добавлением в новый массив")
+print(np.sum(new_images[n]), "- оригинальное изображение после добавления в новый массив")
+print(np.sum(new_images[n+1]), "- яркость-контраст")
+print(np.sum(new_images[n+2]), "- насыщенность")
+print(np.sum(new_images[n+3]), "- только яркость")
+print(np.sum(new_images[n+4]), "- только контраст")
+print()
+print("Маски:")
+print(np.sum(segments[n//5]), "- оригинальная маска перед добавлением в новый массив")
+print(np.sum(new_segments[n]), "- оригинальная маска после добавления в новый массив")
+print(np.sum(new_segments[n+1]), "- дубль")
+print(np.sum(new_segments[n+2]), "- дубль")
+print(np.sum(new_segments[n+3]), "- дубль")
+print(np.sum(new_segments[n+4]), "- дубль")
+
+_______________________________________________________________________________________________________________________________________________________________________
+
+3.1. FUNCTIONS
+
+# Функция преобразования пикселя сегментированного изображения в индекс (3 класса)
+def color2index(color):
+    index=-1
+    if   (color[0]<=100)  and (color[1]>=150)  and (color[2]<=100)  : index=1 # green
+    elif (color[0]>=150) and (color[1]<=100)   and (color[2]<=100)  : index=2 # red
+    else: index = 0
+    return index   
+   
+# Функция преобразования индекса в цвет пикселя
+def index2color(index2):
+    index = np.argmax(index2) # Получаем индекс максимального элемента
+    color=[]
+    if   index == 0: color = [0, 0, 0]      # black
+    elif index == 1: color = [0, 250, 0]    # green
+    elif index == 2: color = [250, 0, 0]    # red         
+    return color # Возвращаем цвет пикслея   
+
+# Функция перевода индекса пикслея в to_categorical
+def rgbToohe(y, num_classes): 
+    y_shape = y.shape # Запоминаем форму массива для решейпа
+    y = y.reshape(y.shape[0] * y.shape[1], 3) # Решейпим в двумерный массив
+    yt = [] # Создаем пустой лист
+    for i in range(len(y)): # Проходим по всем трем канала изображения
+        yt.append(utils.to_categorical(color2index(y[i]), num_classes=num_classes)) # Переводим пиксели в индексы и преобразуем в OHE
+    yt = np.array(yt) # Преобразуем в numpy
+    yt = yt.reshape(y_shape[0], y_shape[1], num_classes) # Решейпим к исходныму размеру
+    return yt # Возвращаем сформированный массив    
+  
+# Функция формирования yTrain
+def yt_prep(data, num_classes):
+    yTrain = [] # Создаем пустой список под карты сегметации
+    for seg in data: # Пробегаем по всем файлам набора с сегминтированными изображениями
+        y = image.img_to_array(seg) # Переводим изображение в numpy-массив размерностью: высота - ширина - количество каналов
+        y = rgbToohe(y, num_classes) # Получаем OHE-представление сформированного массива
+        yTrain.append(y) # Добавляем очередной элемент в yTrain
+        if len(yTrain) % 400 == 0: # Каждые 400 шагов
+            print(len(yTrain)) # Выводим количество обработанных изображений
+    return np.array(yTrain) # Возвращаем сформированный yTrain
+    
+# Функция визуализации сегментированных изображений 
+def processImage(model, count = 1, n_classes = 3):
+    indexes = np.random.randint(0, len(x_Test), count)
+    fig, axs = plt.subplots(3, count, figsize=(40, 20)) #Создаем полотно из n графиков
+    for i,idx in enumerate(indexes): # Проходим по всем сгенерированным индексам
+        predict = np.array(model.predict(x_Test[idx].reshape(1, img_height, img_width, 3))) # Предиктим картику
+        pr = predict[0] # Берем нулевой элемент из перидкта
+        pr1 = [] # Пустой лист под сегментированную картинку из predicta
+        pr2 = [] # Пустой лист под сегменитрованную картинку из y_Test
+        pr = pr.reshape(-1, n_classes) # Решейпим предикт
+        yr = y_Test[idx].reshape(-1, n_classes) # Решейпим y_Test
+        for k in range(len(pr)): # Проходим по всем уровням (количесвто классов)
+            pr1.append(index2color(pr[k])) # Переводим индекс в пиксель
+            pr2.append(index2color(yr[k])) # Переводим индекс в пиксель
+        pr1 = np.array(pr1) # Преобразуем в numpy
+        pr1 = pr1.reshape(img_height, img_width, 3) # Решейпим к размеру изображения
+        pr2 = np.array(pr2) # Преобразуем в numpy
+        pr2 = pr2.reshape(img_height, img_width, 3) # Решейпим к размеру изображения
+        img = Image.fromarray(pr1.astype('uint8')) # Получаем картику из предикта
+        axs[0,i].imshow(img.convert('RGBA')) # Отображаем на графике в первой линии
+        axs[1,i].imshow(Image.fromarray(pr2.astype('uint8'))) # Отображаем на графике во второй линии сегментированное изображение 
+        axs[2,i].imshow(Image.fromarray(x_Test[idx].astype('uint8'))) # Отображаем на графике в третьей линии оригинальное изображение        
+    plt.show()  
+
+_______________________________________________________________________________________________________________________________________________________________________
+
+3.2. xTrain, xTest, yTrain, yTest
+
+# Формируем xTrain
+xTrain = [] # Создаем пустой список под обучающую выборку
+for img in new_images: # Проходим по всем изображениям из images
+    x = image.img_to_array(img) # Переводим изображение в numpy-массив размерностью: высота - ширина - количество каналов
+    xTrain.append(x) # Добавляем очередной элемент в xTrain
+xTrain = np.array(xTrain) # Переводим в numpy
+print(xTrain.shape) # Размерность массива оригинальных изображений
+
+# Формируем yTrain
+import time
+cur_time = time.time() # Засекаем текущее время
+yTrain = yt_prep(new_segments, num_classes)  # Создаем yTrain
+print('Время обработки: ', round(time.time() - cur_time, 2),'c') # Выводим время работы
+print(yTrain.shape) # Размерность массива сегментированных изображений
+
+from sklearn.model_selection import train_test_split
+x_Train, x_Test, y_Train, y_Test = train_test_split(xTrain, yTrain, test_size = 0.2, shuffle = True)
+print(x_Train.shape)
+print(x_Test.shape)
+print()
+print(y_Train.shape)
+print(y_Test.shape)  
+
+ВЫВОД: 
+(1920, 192, 256, 3)
+(480, 192, 256, 3)
+
+(1920, 192, 256, 3)
+(480, 192, 256, 3)
+
+_______________________________________________________________________________________________________________________________________________________________________
+
+4.0. U-Net + PSP-Net
+
+def UNet_PSP(num_classes, input_shape = (192,256,3)):
+    
+    img_input = Input(input_shape)
+
+    def psp_net(layer_input, neirons):
+      x = Conv2D(neirons, (3,3), padding = 'same') (layer_input)
+      m1 = MaxPooling2D(2) (x) 
+      m2 = MaxPooling2D(4) (x)
+      x1 = Conv2D(neirons, (3,3), padding = 'same') (m1)
+      x2 = Conv2D(neirons, (3,3), padding = 'same') (m2)
+      c1 = Conv2DTranspose(neirons, (2,2), strides = 2, padding = 'same') (x1)
+      c2 = Conv2DTranspose(neirons, (2,2), strides = 4, padding = 'same') (x2)
+      all = concatenate ([x, c1, c2])
+      x = Conv2D(neirons, (3,3), padding = 'same') (all)
+      return x
+
+    def block(layer_input, neirons, bn=True):
+      x = Conv2D(neirons, (3,3), padding = 'same') (layer_input)
+      x = BatchNormalization() (x)
+      x = Activation('relu') (x) 
+      x = Conv2D(neirons, (3,3), padding = 'same') (layer_input)
+      x = BatchNormalization() (x)
+      x = Activation('relu') (x)    
+      return x
+
+    def block_UP(layer_input, neirons, conc_two):
+      x = Conv2DTranspose(neirons, (2,2), strides=(2, 2), padding = 'same') (layer_input)
+      x = BatchNormalization() (x)
+      x = Activation('relu') (x)    
+      x = concatenate ([x, conc_two])
+      x = Conv2D(neirons, (3,3), padding = 'same') (x)
+      x = BatchNormalization() (x)
+      x = Activation('relu') (x)              
+      return x
+
+    
+    # Block 1
+    x1 = block(img_input, 32, bn=False)  #192,256,32
+    x2 = block(x1, 32)                   #192,256,32      
+    m1 = MaxPooling2D() (x2)             #96,128,32
+    m1_psp = psp_net(m1, 32)   
+
+    # Block 2
+    x3 = block(m1, 64, bn=False)         #96,128,64
+    x4 = block(x3, 64)                   #96,128,64         
+    m2 = MaxPooling2D() (x4)             #48,64,64
+    m2_psp = psp_net(m2, 64)  
+
+    # Block 3
+    x5 = block(m2, 128, bn=False)        #48,64,128
+    x6 = block(x5, 128)                  #48,64,128           
+    m3 = MaxPooling2D() (x6)             #24,32,128
+    m3_psp = psp_net(m3, 128)
+
+    # Block 4
+    x7 = block(m3, 256, bn=False)        #24,32,256
+    x8 = block(x7, 256)                  #24,32,256      
+    m4 = MaxPooling2D() (x8)             #12,16,256
+
+    # BlockUP      
+    x12 = block_UP(m4, 128, m3_psp)      #24,32,128                  
+    x13 = block_UP(x12, 64, m2_psp)      #48,64,64                
+    x14 = block_UP(x13, 32, m1_psp)      #96,128,32           
+
+    #final
+    x14 = block(x14, 32)             #96,128,32
+    x15 = block(x14, 32)             #96,128,32
+    x16 = Conv2DTranspose(32, (2,2), strides=(2, 2), padding = 'same') (x15)        #192,256,32 
+    fin = Conv2D(num_classes, (3, 3), activation='softmax', padding='same')(x16)    #192,256,3
+
+    model = Model(img_input, fin)
+
+    model.compile(optimizer=Adam(learning_rate=0.0001), loss='binary_crossentropy', metrics=[dice_coef])
+    return model
+    
+modelUnet_PSP = UNet_PSP(num_classes, (192,256, 3)) # Создаем модель unet
+modelUnet_PSP.summary()
+
+modelUnet_PSP = UNet_PSP(num_classes, (192,256, 3)) # Создаем модель unet
+history = modelUnet_PSP.fit(x_Train, y_Train, epochs=200, batch_size=6, validation_data = (x_Test, y_Test))
+
+model_filename = '/content/Unet_PSPnet.h5' # Указываем имя файла для сохранения модели
+modelUnet_PSP.save_weights(model_filename)
+
+plt.plot(history.history['dice_coef'], 
+         label='пересечение областей на обучающем наборе')
+plt.plot(history.history['val_dice_coef'], 
+         label='пересечение областей на проверочном наборе')
+plt.xlabel('Эпоха обучения')
+plt.ylabel('Точность')
+plt.legend()
+plt.show()
+
+plt.plot(history.history['loss'], 
+         label='ошибка на обучающем наборе')
+plt.plot(history.history['val_loss'], 
+         label='ошибка на проверочном наборе')
+plt.xlabel('Эпоха обучения')
+plt.ylabel('Ошибка')
+plt.legend()
+plt.show()
+
+print('Минимальная ошибка на проверочной выборке:', round(np.min(history.history['val_loss']),4))
+print('Средняя ошибка на проверочной выборке:', round(np.mean(history.history['val_loss']),4))
+print()
+print('Максиммальная точность на проверочной выборке:', round(np.max(history.history['val_dice_coef']),4))
+print('Средняя точность на проверочной выборке:', round(np.mean(history.history['val_dice_coef']),4))
+
+ВЫВОД:
+Минимальная ошибка на проверочной выборке: 0.0009
+Средняя ошибка на проверочной выборке: 0.0119
+
+Максиммальная точность на проверочной выборке: 0.9996
+Средняя точность на проверочной выборке: 0.9943
+
+processImage(modelUnet_PSP, 5, num_classes)
+
+_______________________________________________________________________________________________________________________________________________________________________
+
+5.0. CHECKING ON TEST-DATA
+
+ansform_1 = A.HorizontalFlip(p=1)
+
+def aug_test (data, k = len(images)):
+  aug_test = []
+  for n in range(k):
+    aug_1 = transform_1(image=data[n])     # Горизонтальный флип
+    image_transformed_1 = aug_1['image']
+    aug_test.append(img_to_array(image_transformed_1).astype('uint8'))
+  return aug_test 
+  
+def test_processImage(model, count = 1, n_classes = 3):
+    indexes = np.random.randint(0, len(images), 6)
+    fig, axs = plt.subplots(3, count, figsize=(30, 10)) 
+    for i,idx in enumerate(indexes): 
+        predict = np.array(model.predict(x_flip_Test[idx].reshape(1, img_height, img_width, 3))) # Предиктим картику
+        pr = predict[0] # Берем нулевой элемент из перидкта
+        pr1 = [] # Пустой лист под сегментированную картинку из predicta
+        pr2 = [] # Пустой лист под сегменитрованную картинку из y_Test
+        pr = pr.reshape(-1, n_classes) # Решейпим предикт
+        yr = y_flip_Test[idx].reshape(-1, n_classes) # Решейпим y_Test
+        for k in range(len(pr)): # Проходим по всем уровням (количесвто классов)
+            pr1.append(index2color(pr[k])) # Переводим индекс в пиксель
+            pr2.append(index2color(yr[k])) # Переводим индекс в пиксель
+        pr1 = np.array(pr1) # Преобразуем в numpy
+        pr1 = pr1.reshape(img_height, img_width, 3) # Решейпим к размеру изображения
+        pr2 = np.array(pr2) # Преобразуем в numpy
+        pr2 = pr2.reshape(img_height, img_width, 3) # Решейпим к размеру изображения
+        img = Image.fromarray(pr1.astype('uint8')) # Получаем картику из предикта
+        axs[0,i].imshow(img.convert('RGBA')) # Отображаем на графике в первой линии
+        axs[1,i].imshow(Image.fromarray(pr2.astype('uint8'))) # Отображаем на графике во второй линии сегментированное изображение 
+        axs[2,i].imshow(Image.fromarray(x_flip_Test[idx].astype('uint8'))) # Отображаем на графике в третьей линии оригинальное изображение     
+    plt.show()
+    
+test_images = aug_test(images)
+test_mask = aug_test(segments)
+print('Количество изображений для проверки -', len(test_images))
+print('Количество масок для проверки -', len(test_mask))
+print()
+
+x_flip_Test = [] 
+for img in test_images: 
+    x = image.img_to_array(img) 
+    x_flip_Test.append(x) 
+x_flip_Test = np.array(x_flip_Test) 
+y_flip_Test = yt_prep(test_mask, num_classes)  
+
+# Вычисляем результаты сети на тестовом наборе
+scores = modelUnet_PSP.evaluate(x_flip_Test, y_flip_Test, verbose=1)
+print("Доля верных ответов на тестовых данных: ", round(scores[1] * 100, 2), "%", sep="")
+
+ВЫВОД: 
+15/15 [==============================] - 5s 124ms/step - loss: 0.3763 - dice_coef: 0.9648
+Доля верных ответов на тестовых данных: 96.48%
+
+test_processImage(modelUnet_PSP, 6, 3)
+
+_______________________________________________________________________________________________________________________________________________________________________
+
+6.0. HOW MANY ADS DO WE SEE?
+
+def mask_result(y, n_classes): 
+    #y_shape = y.shape # Запоминаем форму массива для решейпа
+    y = np.array(y)
+    y = y.reshape(img_height * img_width, 3) # Решейпим в двумерный массив
+    yt = [] # Создаем пустой лист
+    for i in range(len(y)): # Проходим по всем трем канала изображения
+        yt.append(color2index(y[i])) # Переводим пиксели в индексы и преобразуем в OHE
+    yt = np.array(yt) # Преобразуем в numpy
+    #yt = yt.reshape(y_shape[0], y_shape[1], num_classes) # Решейпим к исходныму размеру
+    num_zeros = (yt == 0).sum()
+    num_ones = (yt == 1).sum()    #green
+    num_two = (yt == 2).sum()     #red
+    all = img_height * img_width
+    x = 100*((num_ones + num_two)/all)
+    x_1 = 100*(num_ones/all)
+    x_2 = 100*(num_two/all)   
+    print("Всего на приложенном кадре элементами рекламы занято", round(x,2), "% от видимого городского пространства, из которых:", 
+                 round(x_1,2), "% - вывески на фасадах здания;", round(x_2,2), "% - конструкции, экраны для рекламы и аналоги")  
+
+def result(model, data, data_seg,  n_classes = 3):
+    n = random.randint(0, len(data))
+
+    x = image.img_to_array(data[n]) # Переводим изображение в numpy-массив размерностью: высота - ширина - количество каналов
+    org = np.array(x) # Переводим в numpy
+
+    predict = np.array(model.predict(org.reshape(1, img_height, img_width, 3))) # Предиктим картику
+    pr = predict[0]
+    pr1 = [] # Пустой лист под сегментированную картинку из predicta   
+    pr = pr.reshape(-1, n_classes) # Решейпим предикт
+    for k in range(len(pr)): # Проходим по всем уровням (количесвто классов)
+        pr1.append(index2color(pr[k])) # Переводим индекс в пиксель
+    pr1 = np.array(pr1)
+    pr1 = pr1.reshape(img_height, img_width, 3) # Решейпим к размеру изображения     
+
+    img = Image.fromarray(pr1.astype('uint8')) # Получаем картику из предикта
+
+    plt.figure(1, figsize=(20, 8)) 
+    plt.subplot(131)
+    plt.imshow(img.convert('RGBA')) # Результат сети
+    plt.subplot(132)
+    plt.imshow(data_seg[n]) # Маска  
+    plt.subplot(133)       
+    plt.imshow(data[n]) # Оригинальное изображение        
+    plt.show()   
+    
+    print()
+    print("Изображение №", n)
+    print()
+    print("CЕТЬ ОПРЕДЕЛИЛА")
+    x_1 = mask_result(img, num_classes)
+    print()
+    print("МАСКА")
+    x_2 = mask_result(data_seg[n], num_classes)
